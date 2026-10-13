@@ -285,6 +285,10 @@ impl PyHashDb {
         self.db.clear();
     }
 
+    fn shrink_to_fit(&mut self) {
+        self.db.shrink_to_fit();
+    }
+
     fn strings(&mut self) -> Vec<String> {
         self.db.strings.clone()
     }

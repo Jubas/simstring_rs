@@ -162,6 +162,11 @@ machine, before and after the ScanCount and per-feature posting index changes:
 | 4 | 0.6 | 2.28 ms | 1.07 ms |
 | 4 | 0.9 | 0.46 ms | 0.32 ms |
 
+Inserting grows internal buffers incrementally. Once indexing is done, call
+`db.shrink_to_fit()` (Rust and Python) to release the spare capacity; this cut
+`HashDb` memory by 25-35% on the benchmark corpora. Search keeps one counter array
+per thread, sized to the largest database that thread has searched (4 bytes per string).
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request on GitHub.

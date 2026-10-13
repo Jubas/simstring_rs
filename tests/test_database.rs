@@ -1,5 +1,32 @@
-use simstring_rust::{CharacterNgrams, Database, HashDb};
+use simstring_rust::{CharacterNgrams, Cosine, Database, HashDb, Searcher};
 use std::sync::Arc;
+
+#[test]
+fn test_shrink_to_fit_preserves_contents() {
+    fn ranked(db: &HashDb, query: &str, alpha: f64) -> Vec<(String, f64)> {
+        let searcher = Searcher::new(db, Cosine);
+        let results = searcher.ranked_search(query, alpha).unwrap();
+        results
+            .into_iter()
+            .map(|(s, x)| (s.to_owned(), x))
+            .collect()
+    }
+    let mut db = HashDb::new(Arc::new(CharacterNgrams::new(2, "$")));
+    let corpus = ["hello", "help", "halo", "world", "hello", "yellow"];
+    for text in corpus {
+        db.insert(text.to_string());
+    }
+    let before = ranked(&db, "hell", 0.3);
+    assert!(!before.is_empty());
+
+    db.shrink_to_fit();
+    assert_eq!(ranked(&db, "hell", 0.3), before);
+
+    // Inserting after shrinking keeps working.
+    db.insert("hell".to_string());
+    assert_eq!(ranked(&db, "hell", 1.0), [("hell".to_owned(), 1.0)]);
+    assert_eq!(db.total_strings(), corpus.len() + 1);
+}
 
 #[test]
 fn test_insert_and_lookup_single_string() {

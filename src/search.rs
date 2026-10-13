@@ -184,7 +184,11 @@ impl<'db, M: Measure> Searcher<'db, M> {
             let max_id = prefix.iter().map(|ids| ids[ids.len() - 1]).max();
             let needed = max_id.map_or(0, |id| id + 1);
             if counts.len() < needed {
-                counts.resize(needed, 0);
+                // Size once to the whole database: one exact allocation instead of
+                // amortized doubling, which could leave up to half the array unused.
+                let target = needed.max(self.db.total_strings());
+                counts.reserve_exact(target - counts.len());
+                counts.resize(target, 0);
             }
             // ScanCount: count prefix occurrences without materialising and sorting
             // the concatenated lists. `touched` records each ID once.

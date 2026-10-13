@@ -54,6 +54,25 @@ impl HashDb {
     pub fn clear(&mut self) {
         Database::clear(self);
     }
+
+    /// Releases spare capacity left by incremental inserts. Call once indexing is done;
+    /// later inserts still work but may grow buffers again.
+    pub fn shrink_to_fit(&mut self) {
+        self.strings.shrink_to_fit();
+        self.string_features.shrink_to_fit();
+        for features in &mut self.string_features {
+            features.shrink_to_fit();
+        }
+        self.postings.shrink_to_fit();
+        for postings in &mut self.postings {
+            postings.sizes.shrink_to_fit();
+            postings.lists.shrink_to_fit();
+            for ids in &mut postings.lists {
+                ids.shrink_to_fit();
+            }
+        }
+        self.feature_sizes.shrink_to_fit();
+    }
 }
 
 impl Database for HashDb {

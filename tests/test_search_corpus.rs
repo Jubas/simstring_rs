@@ -32,9 +32,38 @@ fn check<M: Measure + Copy>(corpus: &[String], queries: &[String], n: usize, mea
             extractor.features(text, &mut reference)
         })
         .collect();
-    let searcher = Searcher::new(&db, measure);
+    // The same answers are required after `shrink_to_fit`.
+    for shrunk in [false, true] {
+        if shrunk {
+            db.shrink_to_fit();
+        }
+        check_queries(
+            &db,
+            &features,
+            corpus,
+            queries,
+            n,
+            measure,
+            &extractor,
+            &mut reference,
+        );
+    }
+}
+
+#[allow(clippy::too_many_arguments)]
+fn check_queries<M: Measure + Copy>(
+    db: &HashDb,
+    features: &[Vec<Spur>],
+    corpus: &[String],
+    queries: &[String],
+    n: usize,
+    measure: M,
+    extractor: &CharacterNgrams,
+    reference: &mut Rodeo,
+) {
+    let searcher = Searcher::new(db, measure);
     for query in queries {
-        let query_features = extractor.features(query, &mut reference);
+        let query_features = extractor.features(query, reference);
         let scores: Vec<_> = features
             .iter()
             .map(|f| {

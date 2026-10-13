@@ -1,10 +1,11 @@
 import pytest
 from collections import Counter
+from pathlib import Path
 
 from simstring_rust.database import HashDb
 from simstring_rust.errors import SearchError
 from simstring_rust.extractors import CharacterNgrams, WordNgrams, CustomExtractor
-from simstring_rust.measures import Cosine
+from simstring_rust.measures import Cosine, Dice, ExactMatch, Jaccard, Overlap
 from simstring_rust.searcher import Searcher
 from concurrent.futures import ThreadPoolExecutor
 
@@ -30,6 +31,64 @@ class TestSimstringBindings:
 
         db.clear()
         assert len(db) == 0
+
+    def test_db_shrink_to_fit(self):
+        expected = self.searcher.ranked_search("appl", 0.3)
+        self.db.shrink_to_fit()
+        assert self.searcher.ranked_search("appl", 0.3) == expected
+        self.db.insert("applet")
+        assert self.searcher.search("applet", 1.0) == ["applet"]
+
+    def test_db_shrink_to_fit_preserves_all_answers(self):
+        path = Path(__file__).parents[2] / "benches" / "data" / "company_names.txt"
+        corpus = path.read_text(encoding="utf-8").splitlines()[:1500]
+        corpus += ["", "aaaa", "aaaa", "東京🍕", "café", "ab" * 40]
+        queries = corpus[::60] + ["never seen 🦀", "International", "东京", ""]
+        queries += [q[::-1] for q in corpus[::150]] + [q.upper() for q in corpus[::150]]
+        alphas = [0.3, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+        measures = [Cosine(), Dice(), Jaccard(), Overlap(), ExactMatch()]
+
+        def build(texts):
+            db = HashDb(CharacterNgrams(n=3, endmarker=" "))
+            for text in texts:
+                db.insert(text)
+            return db
+
+        def answers(db):
+            out = []
+            for measure in measures:
+                searcher = Searcher(db, measure)
+                for query in queries:
+                    for alpha in alphas:
+                        out.append(
+                            (
+                                searcher.ranked_search(query, alpha),
+                                searcher.search(query, alpha),
+                            )
+                        )
+            return out
+
+        plain = build(corpus)
+        expected = answers(plain)
+        assert sum(len(ranked) for ranked, _ in expected) > 0
+
+        # Same database before and after shrinking; floats compared exactly.
+        shrunk = build(corpus)
+        assert answers(shrunk) == expected
+        shrunk.shrink_to_fit()
+        assert shrunk.strings() == plain.strings()
+        assert answers(shrunk) == expected
+        shrunk.shrink_to_fit()
+        assert answers(shrunk) == expected
+
+        # Inserting into a shrunk database matches a database that was never shrunk.
+        half = len(corpus) // 2
+        grown = build(corpus[:half])
+        grown.shrink_to_fit()
+        for text in corpus[half:]:
+            grown.insert(text)
+        assert grown.strings() == plain.strings()
+        assert answers(grown) == expected
 
     def test_db_strings(self):
         db = HashDb(self.extractor)
